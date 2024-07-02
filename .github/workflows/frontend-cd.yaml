@@ -1,0 +1,113 @@
+name: Frontend Continuous Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'starter/frontend/**'
+  workflow_dispatch:
+
+jobs:
+  linting-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Install dependency
+        run: |
+          cd starter/frontend
+          npm install
+
+      - name: Run linting-job
+        run: |
+          cd starter/frontend
+          npm run lint
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Install dependency
+        run: |
+          cd starter/frontend
+          npm install
+
+      - name: Run test-job
+        run: |
+          cd starter/frontend
+          npm run test
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [linting-job, test]
+
+    env:
+      REACT_APP_MOVIE_API_URL: ${{ secrets.REACT_APP_API_URL }}
+
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup Nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Install dependency
+        run: |
+          cd starter/frontend
+          npm install
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Config AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Build Docker image
+        run: |
+          cd starter/frontend
+          docker build --build-arg REACT_APP_API_URL=${{ env.REACT_APP_API_URL }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_FRONTEND }}:${GITHUB_SHA} .
+
+      - name: login to ECR
+        id: ecr_login
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: "true"
+
+      - name: push image to ECR
+        run: |
+          cd starter/frontend
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_FRONTEND }}:${GITHUB_SHA}
+
+      - name: Update kube config
+        run:
+          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER }} --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to EKS
+        run:
+          cd ./starter/frontend/k8s &&
+          kustomize edit set image frontend=${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY_FRONTEND }}:${GITHUB_SHA} &&
+          kustomize build | kubectl apply -f -
+
+

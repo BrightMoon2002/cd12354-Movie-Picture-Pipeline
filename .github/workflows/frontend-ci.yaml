@@ -1,0 +1,115 @@
+name: Front End Continuous Integration
+
+on:
+  pull_request:
+    paths:
+      - 'starter/frontend/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  linting-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Cache Node.js modules
+        uses: actions/cache@v4
+        with:
+            path: |
+              ~/.npm
+              ~/.cache
+            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            restore-keys: |
+              ${{ runner.os }}-node-    
+
+      - name: Install dependency
+        run: |
+          cd starter/frontend
+          npm install
+
+      - name: Run linting-job
+        run: |
+          cd starter/frontend
+          npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Cache Node.js modules
+        uses: actions/cache@v4
+        with:
+            path: |
+              ~/.npm
+              ~/.cache
+            key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+            restore-keys: |
+              ${{ runner.os }}-node-    
+
+      - name: Install dependency
+        run: |
+          cd starter/frontend
+          npm install
+
+      - name: Run test-job
+        run: |
+          cd starter/frontend
+          npm run test
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [linting-job, test]
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Cache Node.js modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-    
+
+      - name: Install dependency
+        run: |
+          cd starter/frontend
+          npm install
+
+      - name: Run test-job
+        run: |
+          cd starter/frontend
+          npm run test
+
+      - name: Build docker
+        run: |
+          cd starter/frontend
+          docker build --tag mp-frontend:latest .
+
+
+        
